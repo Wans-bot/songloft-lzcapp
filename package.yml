@@ -1,0 +1,91 @@
+package: cloud.lazycat.app.songloft
+version: 2.13.3-1
+name: Songloft 音乐库
+description: 自托管的本地音乐库：自动扫描曲库与封面元数据，插件扩展音源与歌词，浏览器直接播放
+author: Songloft Team
+license: Apache-2.0
+homepage: https://github.com/songloft-org/songloft
+min_os_version: 1.5.0
+permissions:
+  required:
+    - net.internet
+    - document.private
+locales:
+  zh-CN:
+    name: Songloft 音乐库
+    description: 自托管的本地音乐库：自动扫描曲库与封面元数据，插件扩展音源与歌词，浏览器直接播放。
+    usage: |
+      Songloft 是一台属于你自己的音乐库服务器：把音乐文件放进微服，它会自动扫描曲库、
+      读取封面与标签元数据，并把歌曲、歌手、专辑、歌单整理好，在浏览器里直接播放。
+      插件体系可以再扩展音源、歌词与元数据刮削能力。
+
+      第一次使用：
+
+      1. 打开应用会自动登录（不需要手输账号密码），界面默认简体中文。
+      2. 放音乐：在懒猫「文件管理器」里找到「Songloft 音乐库」的应用文稿目录，把音乐文件
+         （mp3 / flac / wav / ape / ogg / opus / m4a / m4b / dsd 等）放进去。
+         该目录就是本应用的音乐库目录，放好后无需任何设置。
+      3. 扫描入库：打开应用后可到「设置 → 媒体库（扫描）」点一次扫描；应用默认开启自动扫描
+         （可在同一页调整扫描间隔）。扫描完成后出现歌曲、歌手、专辑与按目录自动生成的歌单。
+      4. 播放：在曲库页点任意歌曲即可播放，支持歌单、收藏与歌词。
+      5. 插件（可选）：在「插件管理」页上传插件文件（.jsplugin.zip）即可扩展能力；
+         上传时弹出的文件窗口可以切换「网盘文件 / 本地文件」两种来源。
+
+      审核账号（应用自身登录，正常情况下无需手输）：
+
+      - 账号：admin
+      - 密码：Slzc7Qw9Tm2Xr
+
+      账号切换：右下角有「切换账号」按钮，点击后退出当前登录并停用本会话的自动登录，
+      可在登录页手动输入其他账号；登录页点「一键登录」即可恢复免密。
+
+      说明：
+
+      - 曲库、封面、歌词、播放记录、收藏与账号数据都保存在微服本机，重启与升级不丢失，
+        升级不会改变实例；音乐文件放在应用文稿里，卸载应用默认不会删除。
+      - 应用自身不内置、不分发任何音乐内容；第三方插件接入的网络音源与歌词版权归原权利人，
+        请仅用于你享有合法使用权的内容。
+      - 上游预编译发行版会向维护者的崩溃上报服务发送 panic 堆栈、版本号与活跃心跳，
+        不含音乐文件、账号或个人信息，详见应用内《用户协议与隐私政策》。
+  en-US:
+    name: Songloft
+    description: A self-hosted music library server that scans your collection, reads cover art and tags, and extends itself with plugins.
+    usage: |
+      Songloft is a music library server of your own: drop music onto the box and it scans the
+      collection, reads cover art and tag metadata, and organises tracks, artists, albums and
+      playlists for playback in the browser. A plugin system extends sources, lyrics and metadata
+      scraping.
+
+      First launch:
+
+      1. Opening the app signs you in automatically (no password to type); the UI defaults to
+         Simplified Chinese.
+      2. Add music: put your audio files (mp3 / flac / wav / ape / ogg / opus / m4a / m4b / dsd and
+         more) into the app documents folder of "Songloft 音乐库" in the box file manager. That
+         folder is this app's music library folder, so no further setup is needed.
+      3. Scan: open the app and run a scan from Settings → Library (scan). Automatic scanning is on
+         by default and its interval is configurable on the same page. Tracks, artists, albums and
+         folder-based playlists appear once the scan finishes.
+      4. Play: click any track in the library; playlists, favourites and lyrics are included.
+      5. Plugins (optional): upload a .jsplugin.zip on the plugin page. The file dialog offers both
+         cloud-drive files and local files.
+
+      Review account (the app's own login; normally not needed):
+
+      - Username: admin
+      - Password: Slzc7Qw9Tm2Xr
+
+      Switching accounts: the bottom-right "切换账号" control signs out and disables the automatic
+      sign-in for this session so you can enter another account; the login page offers a one-click
+      sign-in to restore the passwordless flow.
+
+      Notes:
+
+      - The library, cover art, lyrics, play history, favourites and account data live on your box
+        and survive restarts and upgrades; the instance does not change on upgrade. Music files are
+        app documents and are not deleted when the app is uninstalled.
+      - The app ships and distributes no music content of its own; network sources and lyrics come
+        from third-party plugins and remain the property of their rights holders.
+      - The upstream prebuilt release reports panic stack traces, its version number and an activity
+        heartbeat to the maintainer's crash-reporting service, never music files, accounts or
+        personal data; see the user agreement and privacy policy linked inside the app.

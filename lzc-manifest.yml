@@ -1,0 +1,152 @@
+# Songloft 音乐库 · 懒猫微服运行清单（LPK V2）
+#
+# 目标环境：lzcos 1.6.2 / lzc-cli 2.0.9（规范校准留痕见 实测记录/specsync/）
+# 上游：songloft-org/songloft v2.13.3（发行镜像 songloft/songloft:2.13.3 复制到懒猫源）
+#
+# 设计要点：
+# 1. 单容器：上游发行镜像监听 58091，Web 界面是内嵌的 Flutter Web 构建。
+# 2. 持久化：镜像声明 VOLUME /app/music 与 /app/data，两者都必须 bind，否则 docker 挂匿名卷
+#    盖住持久目录（平台坑「数据持久化」一节）。
+#      - /app/data  → /lzcapp/var/songloft（数据库、封面缓存、插件、账号）
+#      - /app/music → /lzcapp/documents/{{ .S.DeployUID }}（应用文稿＝音乐库，用户在文件管理器里放歌）
+# 3. 免密：网页界面是 Flutter Web（CanvasKit），登录表单不是 DOM 表单，builtin://simple-inject-password
+#    填不进去；改由自写 browser inject 调上游登录接口换 Token，按客户端约定写 localStorage。
+# 4. 文件选择器：插件上传走官方网盘文件选择器，request 与 browser 两侧成对配置。
+# 5. HTML 缓存修正：静态页带条件请求语义时，客户端会复用未注入的旧副本；
+#    request 阶段去掉条件请求头、response 阶段对 HTML 输出 no-store，保证注入每次送达。
+application:
+  subdomain: songloft
+  upstreams:
+    - location: /
+      backend: http://songloft.cloud.lazycat.app.songloft.lzcapp:58091
+      disable_trim_location: true
+  health_check:
+    test_url: http://songloft.cloud.lazycat.app.songloft.lzcapp:58091/api/v1/health
+    start_period: 180s
+    timeout: 10s
+  injects:
+    # ── 网盘文件桥接（request 阶段）──────────────────────────────────
+    # 官方《网盘文件选择器/自动拦截》要求 request 与 browser 两侧成对配置：
+    # /__lazycat_file_bridge/* 转发到 file.<boxdomain>，让「保存到网盘」真正落盘，
+    # 并让共享目录按 owner 正确切换文件根。代码取自官方专题（与 picimpact/wavelog 同版）。
+    - id: lazycat-file-bridge
+      'on': request
+      auth_required: false
+      when:
+        - /__lazycat_file_bridge/*
+      do:
+        - src: |
+            const bridgePrefix = "/__lazycat_file_bridge";
+            const requestHost = String(ctx.request.host || "").split(":")[0].toLowerCase();
+            const firstDot = requestHost.indexOf(".");
+            const method = String(ctx.request.method || "").toUpperCase();
+            if (firstDot <= 0 || !requestHost.endsWith(".heiyu.space") ||
+                !["GET", "HEAD", "PUT"].includes(method)) {
+              ctx.response.send(["GET", "HEAD", "PUT"].includes(method) ? 400 : 405,
+                "Invalid LazyCat file bridge request");
+              return;
+            }
+            const boxDomain = requestHost.slice(firstDot + 1);
+            ctx.headers.del("Origin");
+            ctx.headers.del("Referer");
+            ctx.proxy.to("https://file." + boxDomain, {
+              path: "/files/home" + ctx.request.path.slice(bridgePrefix.length),
+              query: ctx.request.raw_query,
+              use_target_host: true,
+              timeout_ms: 120000,
+              on_fail: "error",
+            });
+    # ── 官方网盘文件选择器（browser 阶段）───────────────────────────
+    # 拦截插件上传入口（Flutter Web 内部创建的 <input type=file>）：选择文件时弹出统一窗口，
+    # 可切换「网盘文件 / 本地文件」。保持默认 auth_required=true：本应用页面不公开，
+    # 匿名请求拿不到 HTML；已登录的评审客户端照常执行。
+    - id: open-save-chooser
+      'on': browser
+      # 官方选择器脚本会调平台 API（QuerySessionInfo），匿名请求下会被拒并抛未捕获异常，
+      # 因此保持默认 auth_required=true：本应用没有 public_path，匿名请求拿不到 HTML，
+      # 平台已登录的客户端（评审环境）照常执行。临时改成 false 的验证结果见
+      # 实测记录：脚本确实注册了自定义元素（customElements.get('lzc-file-picker') === true），
+      # 同时匿名环境下抛出 GrpcWebError（与官方文档描述一致）。
+      auth_required: true
+      when:
+        - /*
+      do:
+        - src: >-
+            file:///lzcapp/pkg/content/lazycat-injects/lzc-file-chooser-inject.js
+          params:
+            diskRoot: /_lzc/files/home
+            fileBridgeRoot: /__lazycat_file_bridge
+            fallbackMime: application/octet-stream
+            locale: auto
+            hooks:
+              fileSystemAccess: true
+              fileInput: true
+              downloadAnchor: true
+    # ── 免密登录 + 账号切换（browser 阶段，自写注入）──────────────────
+    - id: songloft-autologin
+      'on': browser
+      auth_required: false
+      when:
+        - /*
+      do:
+        - src: file:///lzcapp/pkg/content/lazycat-injects/songloft-autologin.js
+          params:
+            username: admin
+            password: Slzc7Qw9Tm2Xr
+    # ── HTML 缓存修正：去掉条件请求头，强制上游回新页面 ────────────────
+    - id: songloft-strip-conditional-headers
+      'on': request
+      auth_required: false
+      when:
+        - /*
+      do: |
+        var accept = String(ctx.headers.get("Accept") || "");
+        if (accept.indexOf("text/html") < 0) return;
+        ctx.headers.del("If-None-Match");
+        ctx.headers.del("If-Modified-Since");
+    # ── HTML 缓存修正：对 HTML 输出 no-store 并去掉校验头 ──────────────
+    - id: songloft-html-no-store
+      'on': response
+      auth_required: false
+      when:
+        - /*
+      do: |
+        if (ctx.status !== 200) return;
+        var ct = String(ctx.headers.get("Content-Type") || "");
+        if (ct.indexOf("text/html") < 0) return;
+        ctx.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+        ctx.headers.del("ETag");
+        ctx.headers.del("Last-Modified");
+services:
+  # ── Songloft 服务端（单容器；上游发行镜像，58091）──────────────────
+  songloft:
+    image: registry.lazycat.cloud/wans/songloft/songloft:405046e0b649d16e
+    environment:
+      TZ: Asia/Shanghai
+      # 上游据此关闭「界面上传升级」（容器内不适用），与镜像默认一致，显式写出来。
+      IN_DOCKER: "true"
+      # 审核账号：与 package.yml 简介中的账号密码一致；首次启动自动建号。
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: Slzc7Qw9Tm2Xr
+      # 音乐库根目录＝本应用的应用文稿根目录（官方 advanced-file.md 的稳定路径）：
+      # 声明 document.private 后平台把本应用文稿按用户挂到 /lzcapp/documents/<uid>，
+      # 应用直接读这个根目录即可，不需要知道 uid。
+      MUSIC_DIR: /lzcapp/documents
+    binds:
+      # 与镜像 Config.Volumes 完全对齐（/app/music、/app/data），避免 docker 挂匿名卷。
+      # 音乐库不用 bind 指向文稿，而是走 MUSIC_DIR 的稳定路径；两条实测被平台拒绝的
+      # 文稿 bind 写法（别再试）：
+      #   * /lzcapp/documents/{{ .S.DeployUID }} → 渲染成字面量 @，报
+      #     mkdir /lzcsys/data/document/@: operation not permitted；
+      #   * /lzcapp/documents → 报 400 invalid bind source: /lzcapp/documents (missing uid)；
+      #     官方 advanced-manifest-render.md 也写明单实例应用下 .S.DeployUID 无实际意义。
+      - /lzcapp/var/songloft:/app/data
+      - /lzcapp/var/songloft/music:/app/music
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O - http://127.0.0.1:58091/api/v1/health >/dev/null 2>&1 || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
